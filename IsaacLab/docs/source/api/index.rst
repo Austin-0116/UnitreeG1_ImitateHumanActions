@@ -1,0 +1,290 @@
+API Reference
+=============
+
+This page gives an overview of all the modules and classes in the Isaac Lab extensions.
+
+isaaclab extension
+------------------
+
+The following modules are available in the ``isaaclab`` extension:
+
+.. currentmodule:: isaaclab
+
+.. autosummary::
+   :toctree: lab
+
+   app
+   actuators
+   assets
+   benchmark
+   cloner
+   controllers
+   devices
+   envs
+   managers
+   markers
+   physics
+   renderers
+   scene
+   scene_data
+   sensors
+   sim
+   terrains
+   utils
+   visualizers
+
+.. toctree::
+   :hidden:
+
+   lab/isaaclab.envs.mdp
+   lab/isaaclab.envs.reset
+   lab/isaaclab.envs.ui
+   lab/isaaclab.sensors.patterns
+   lab/isaaclab.sim.converters
+   lab/isaaclab.sim.schemas
+   lab/isaaclab.sim.spawners
+   lab/isaaclab.sim.views
+   lab/isaaclab.sim.utils
+   lab/isaaclab.sim.usd_export
+
+
+isaaclab_rl extension
+---------------------
+
+The following wrappers are available in the ``isaaclab_rl`` extension:
+
+.. currentmodule:: isaaclab_rl
+
+.. toctree::
+   :maxdepth: 2
+
+   lab_rl/isaaclab_rl
+
+
+isaaclab_mimic extension
+------------------------
+
+.. include:: /source/features/imitation-learning/_mimic_deprecation.include
+
+The following modules are available in the ``isaaclab_mimic`` extension:
+
+.. currentmodule:: isaaclab_mimic
+
+.. autosummary::
+   :toctree: lab_mimic
+
+   datagen
+   envs
+
+isaaclab_contrib extension
+-----------------------------
+
+The following modules are available in the ``isaaclab_contrib`` extension:
+
+.. currentmodule:: isaaclab_contrib
+
+.. autosummary::
+   :toctree: lab_contrib
+
+   actuators
+   assets
+   controllers
+   mdp
+   rl
+   sensors
+
+isaaclab_fovi extension
+-----------------------
+
+The following modules are available in the ``isaaclab_fovi`` extension:
+
+.. currentmodule:: isaaclab_fovi
+
+.. autosummary::
+   :toctree: lab_fovi
+
+   mdp
+   sensors
+
+isaaclab_tasks extension
+------------------------
+
+This package ``isaaclab_tasks`` contains the tasks that are available in the Isaac Lab.
+For more information, browse the registered tasks in :doc:`/source/isaaclab/environments`.
+
+It includes the following modules:
+
+.. currentmodule:: isaaclab_tasks
+
+.. autosummary::
+   :toctree: lab_tasks
+
+   utils
+
+isaaclab_teleop extension
+-------------------------
+
+The following modules are available in the ``isaaclab_teleop`` extension:
+
+.. currentmodule:: isaaclab_teleop
+
+.. toctree::
+   :maxdepth: 2
+
+   lab_teleop/isaaclab_teleop
+
+isaaclab_isaacsim extension
+---------------------------
+
+The following modules are available in the ``isaaclab_isaacsim`` extension:
+
+.. currentmodule:: isaaclab_isaacsim
+
+.. autosummary::
+   :toctree: lab_isaacsim
+
+   app
+   assets
+   cloner
+   physics
+   renderers
+   sensors
+
+.. toctree::
+   :hidden:
+
+   lab_isaacsim/isaaclab_isaacsim.sim.schemas
+   lab_isaacsim/isaaclab_isaacsim.sim.spawners
+
+isaaclab_newton extension
+-------------------------
+
+The following modules are available in the ``isaaclab_newton`` extension:
+
+.. currentmodule:: isaaclab_newton
+
+.. autosummary::
+   :toctree: lab_newton
+
+   actuators
+   assets
+   cloner
+   controllers
+   physics
+   physics.coupling
+   renderers
+   sensors
+   sim.schemas
+
+.. toctree::
+   :hidden:
+
+   lab_newton/isaaclab_newton.sim.spawners
+   lab_newton/isaaclab_newton.sim.usd_export
+
+isaaclab_neural extension
+-------------------------
+
+The ``isaaclab_neural`` extension runs tasks on learned neural robot dynamics models.
+See :ref:`newton-neural-robot-dynamics` for the full workflow.
+
+.. toctree::
+   :maxdepth: 1
+
+   lab_neural/isaaclab_neural
+   lab_neural/isaaclab_neural.physics
+
+isaaclab_ov extension
+---------------------
+
+The following modules are available in the ``isaaclab_ov`` extension:
+
+.. currentmodule:: isaaclab_ov
+
+.. autosummary::
+   :toctree: lab_ov
+
+   app
+   assets
+   cloner
+   physics
+   renderers
+   sim.views
+
+isaaclab_assets extension
+-------------------------
+
+The following modules are available in the ``isaaclab_assets`` extension:
+
+.. currentmodule:: isaaclab_assets
+
+.. autosummary::
+   :toctree: lab_assets
+
+   robots
+   sensors
+
+isaaclab_visualizers extension
+------------------------------
+
+The following modules are available in the ``isaaclab_visualizers`` extension:
+
+.. currentmodule:: isaaclab_visualizers
+
+.. autosummary::
+   :toctree: lab_visualizers
+
+   kit
+   newton
+   rerun
+   viser
+
+isaaclab_experimental extension
+--------------------------------
+
+The following modules are available in the ``isaaclab_experimental`` extension:
+
+.. currentmodule:: isaaclab_experimental
+
+.. autosummary::
+   :toctree: lab_experimental
+
+   envs
+   mdp2
+   deprecated.envs
+   deprecated.managers
+   deprecated.utils
+
+
+isaaclab_tasks_experimental extension
+--------------------------------------
+
+The package ``isaaclab_tasks_experimental`` contains experimental task implementations
+under active development, not yet part of the stable task suite.
+For the list of available environments, please refer to :doc:`/source/isaaclab/environments`.
+
+
+Additional public API modules
+-----------------------------
+
+The following public modules provide additional specialized APIs:
+
+.. toctree::
+   :maxdepth: 1
+
+   lab/isaaclab.benchmark.recorders
+   lab/isaaclab.sensors.camera
+   lab/isaaclab.sensors.ray_caster
+   lab/isaaclab.ui.widgets
+   lab/isaaclab.ui.xr_widgets
+   lab/isaaclab.utils.leapp
+   lab_experimental/isaaclab_experimental.deprecated.envs.mdp.actions
+   lab_experimental/isaaclab_experimental.mdp2.mdp
+   lab_newton/isaaclab_newton.envs.mdp
+   lab_newton/isaaclab_newton.sim.views
+   lab_ov/isaaclab_ov.envs.mdp
+   lab_ov/isaaclab_ov.sensors
+   lab_ov/isaaclab_ov.sensors.ray_caster
+   lab_isaacsim/isaaclab_isaacsim.envs.mdp
+   lab_isaacsim/isaaclab_isaacsim.sim.views
+   lab_ppisp/isaaclab_ppisp

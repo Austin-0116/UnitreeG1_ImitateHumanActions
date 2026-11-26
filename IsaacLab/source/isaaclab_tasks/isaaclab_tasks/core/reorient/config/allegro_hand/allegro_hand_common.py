@@ -1,0 +1,116 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Allegro Hand identity shared by the Direct and manager-based reorientation tasks.
+
+Asset and marker configurations, joint/body name lists, backend physics
+presets, and the sim mixin. No task tunables.
+"""
+
+from isaaclab_isaacsim.physics import PhysxCfg
+from isaaclab_isaacsim.sim.schemas import PhysxRigidBodyCfg
+from isaaclab_neural.physics import MJWarpNeRDSolverCfg
+from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, SteelSolverCfg
+from isaaclab_ov.physics import OvPhysxCfg
+
+import isaaclab.sim as sim_utils
+from isaaclab.assets import RigidObjectCfg
+from isaaclab.markers import VisualizationMarkersCfg
+from isaaclab.physics import PhysxAutoCfg
+from isaaclab.utils import configclass, replace
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+
+from isaaclab_tasks.utils import PresetCfg
+
+from isaaclab_assets.robots.allegro import ALLEGRO_HAND_CFG, ALLEGRO_HAND_FRICTION_REPLACEMENTS
+
+ALLEGRO_HAND_ROBOT_CFG = replace(ALLEGRO_HAND_CFG, prim_path="{ENV_REGEX_NS}/Robot")
+
+CUBE_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/object",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd",
+        rigid_props=[
+            sim_utils.UsdPhysicsRigidBodyCfg(kinematic_enabled=False),
+            PhysxRigidBodyCfg(
+                disable_gravity=False,
+                enable_gyroscopic_forces=True,
+                solver_position_iteration_count=8,
+                solver_velocity_iteration_count=0,
+                sleep_threshold=0.005,
+                stabilization_threshold=0.0025,
+                max_depenetration_velocity=1000.0,
+            ),
+        ],
+        collision_props=[
+            sim_utils.UsdPhysicsCollisionCfg(),
+            sim_utils.UsdPhysicsMeshCollisionCfg(mesh_approximation_name="convexHull"),
+        ],
+        scale=(1.2, 1.2, 1.2),
+    ),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, -0.17, 0.56), rot=(0.0, 0.0, 0.0, 1.0)),
+)
+"""In-hand cube for the Allegro reorientation task."""
+
+GOAL_MARKER_OFFSET = (-0.12, -0.14, 0.06)
+"""Goal-cube display offset from the in-hand position [m], wider than the shared one to clear the larger hand."""
+
+GOAL_OBJECT_CFG = VisualizationMarkersCfg(
+    prim_path="/Visuals/goal_marker",
+    markers={
+        "goal": sim_utils.UsdFileCfg(
+            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd",
+            scale=(1.2, 1.2, 1.2),
+        )
+    },
+)
+"""Goal cube marker for the reorientation environments."""
+
+
+@configclass
+class PhysicsCfg(PresetCfg):
+    """Physics backend presets for the Allegro Hand reorientation environments."""
+
+    isaacsim_physx = PhysxCfg(
+        bounce_threshold_velocity=0.2,
+    )
+    newton_mjwarp = NewtonCfg(
+        solver_cfg=MJWarpSolverCfg(
+            integrator="implicitfast",
+            njmax=80,
+            nconmax=70,
+            impratio=10.0,
+            cone="elliptic",
+            update_data_interval=2,
+        ),
+        num_substeps=2,
+    )
+    newton_mjwarp_nerd = replace(
+        newton_mjwarp,
+        solver_cfg=MJWarpNeRDSolverCfg.from_mjwarp(
+            newton_mjwarp.solver_cfg,
+            checkpoint="logs/neural/allegro_hand/flashnerd.pt",
+            articulation=ALLEGRO_HAND_ROBOT_CFG.prim_path,
+        ),
+    )
+    newton_steel = NewtonCfg(
+        solver_cfg=SteelSolverCfg(
+            update_mass_matrix_interval=2,
+            enable_joint_limits=True,
+            enable_joint_velocity_limits=True,
+            iterations=8,
+            articulation_constraint_max=192,
+            free_body_constraint_max=64,
+            contact_friction_gap_max=0.001,
+            contact_torsion=False,
+        ),
+        num_substeps=2,
+    )
+    ovphysx = OvPhysxCfg(
+        # Match the measured 0.6 runtime actuator efforts, not the USD coefficient (0.035).
+        legacy_joint_friction_replacements=ALLEGRO_HAND_FRICTION_REPLACEMENTS,
+    )
+    physx = PhysxAutoCfg(isaacsim_physx=isaacsim_physx, ovphysx=ovphysx)
+    default = newton_mjwarp

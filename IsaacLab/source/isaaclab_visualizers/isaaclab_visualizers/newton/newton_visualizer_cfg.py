@@ -1,0 +1,131 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Configuration classes for the Newton visualizer backend."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
+
+from isaaclab_ov.renderers import OVRTXRendererCfg
+
+from isaaclab.utils import configclass
+from isaaclab.visualizers.visualizer_cfg import VisualizerBackendCfg, VisualizerCfg
+
+if TYPE_CHECKING:
+    from .newton_visualizer import NewtonGLVisualizer
+
+
+@configclass
+class NewtonGLBackendCfg(VisualizerBackendCfg):
+    """Newton visualizer options: OpenGL rendering and model display, and the optional OVRTX view."""
+
+    class_type: type[NewtonGLVisualizer] | str = "{DIR}.newton_visualizer:NewtonGLVisualizer"
+    visualizer_type: str = "newton"
+    cloning_contexts: ClassVar[tuple[type | str, ...]] = ("isaaclab_newton.cloner:NewtonReplicateContext",)
+
+    world_spacing: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """Visual spacing between simulation worlds along each axis [m].
+
+    Non-zero axes arrange visible worlds in a compact grid without changing their simulated poses.
+    """
+
+    show_joints: bool = False
+    """Show joint visualization."""
+
+    show_contacts: bool = False
+    """Show contact visualization."""
+
+    show_collision: bool = False
+    """Show collision visualization."""
+
+    show_springs: bool = False
+    """Show spring visualization."""
+
+    show_inertia_boxes: bool = False
+    """Show inertia box visualization."""
+
+    show_com: bool = False
+    """Show center of mass visualization."""
+
+    show_particles: bool = True
+    """Show simulation particles. Set to False to hide them, for example in a surface-only view."""
+
+    show_lidar_hits: bool = False
+    """Show lidar hit visualization. Set to True to copy and draw hits; a dense scan is expensive to upload."""
+
+    particle_color: tuple[float, float, float] | None = None
+    """Optional particle color RGB [0, 1]. Uses Newton viewer defaults when ``None``."""
+
+    enable_picking: bool = True
+    """Enable right-click dragging with Newton rigid-body solvers.
+
+    Supported coupled solvers may expose dragging through a rigid-body entry.
+    Disabled automatically for headless viewers, standalone MPM, and non-Newton
+    physics. MPM particles are not pickable.
+    """
+
+    enable_shadows: bool = True
+    """Enable shadow rendering."""
+
+    enable_sky: bool = True
+    """Enable procedural sky rendering when ``background_color`` is ``None``."""
+
+    enable_wireframe: bool = False
+    """Enable wireframe rendering."""
+
+    sky_upper_color: tuple[float, float, float] = (0.2, 0.4, 0.6)
+    """Sky upper color RGB [0, 1]."""
+
+    sky_lower_color: tuple[float, float, float] = (0.5, 0.6, 0.7)
+    """Sky lower color RGB [0, 1]."""
+
+    light_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    """Light color RGB [0, 1]."""
+
+    rtx_camera: bool | None = None
+    """Declare an OVRTX viewer camera so the HUD can switch the main view between Newton GL and OVRTX.
+
+    The camera is added to the scene at launch because scene sensors cannot be added later, and it adds startup
+    time and some frame time even while OpenGL is shown, so it is off by default. It renders only while the OVRTX
+    view is selected. Enabling it needs the ``ovrtx`` package and a physics backend other than Kit-based PhysX.
+    ``None`` leaves it off unless ``initial_renderer="rtx"`` asks for it (``--viz newton_rtx`` does); ``True`` adds it;
+    ``False`` forbids it.
+    """
+
+    rtx_camera_path: str | None = None
+    """Prim path of the OVRTX viewer camera that launch declared for this window; launch sets it, not users.
+
+    None means the window shows the first scene camera whose prim path starts with ``/World/viewer_camera_``.
+    """
+
+    initial_renderer: Literal["opengl", "rtx"] = "opengl"
+    """Renderer the window opens with: the Newton OpenGL view or the OVRTX viewer camera.
+
+    ``"rtx"`` requires the OVRTX camera (see :attr:`rtx_camera`) and a kitless runtime, and starts in the RTX view
+    that the HUD's Renderer selector otherwise switches to.
+    """
+
+    rtx_renderer_cfg: OVRTXRendererCfg = OVRTXRendererCfg()
+    """Renderer of the OVRTX viewer camera."""
+
+    rtx_render_settings: dict[str, Any] = dict()
+    """Additional RTX render settings of the OVRTX viewer camera."""
+
+
+@configclass
+class NewtonGLVisualizerCfg(NewtonGLBackendCfg, VisualizerCfg):
+    """Deprecated combined configuration; use ``VisualizerCfg(backend=NewtonGLBackendCfg())``.
+
+    Simulation launch translates this declaration before constructing visualizers.
+    """
+
+    backend: NewtonGLBackendCfg = NewtonGLBackendCfg()
+    streaming_view: bool = True
+
+
+@configclass
+class NewtonVisualizerCfg(NewtonGLVisualizerCfg):
+    """Deprecated Newton GL configuration; use ``VisualizerCfg(backend=NewtonGLBackendCfg())``."""

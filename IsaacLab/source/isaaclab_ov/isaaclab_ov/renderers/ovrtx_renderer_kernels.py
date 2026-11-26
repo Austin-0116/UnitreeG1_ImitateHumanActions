@@ -1,0 +1,238 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Warp kernels for OVRTX rendering pipeline."""
+
+from typing import Any
+
+import warp as wp
+
+# Segmentation colorization is shared across renderer backends to keep colors visually consistent.
+from isaaclab.renderers.segmentation_colors import random_color_from_id_wp
+
+
+@wp.kernel(enable_backward=False)
+def remap_semantic_colors_kernel(
+    image: wp.array(dtype=wp.uint8, ndim=4),
+    source_colors: wp.array(dtype=wp.uint32),
+    target_colors: wp.array(dtype=wp.uint8, ndim=2),
+):
+    """Apply a class palette to colorized pixels without cascading color replacements."""
+    env, y, x = wp.tid()
+    color = (
+        wp.uint32(image[env, y, x, 0])
+        + wp.uint32(image[env, y, x, 1]) * wp.uint32(256)
+        + wp.uint32(image[env, y, x, 2]) * wp.uint32(65536)
+        + wp.uint32(image[env, y, x, 3]) * wp.uint32(16777216)
+    )
+    for entry in range(source_colors.shape[0]):
+        if color == source_colors[entry]:
+            for channel in range(4):
+                image[env, y, x, channel] = target_colors[entry, channel]
+            break
+
+
+@wp.kernel(enable_backward=False)
+def create_marker_transforms_kernel(
+    positions: wp.array(dtype=wp.vec3),
+    orientations: wp.array(dtype=wp.quat),
+    scales: wp.array(dtype=wp.vec3),
+    local_transforms: wp.array(dtype=wp.mat44d),
+    instance_ids: wp.array(dtype=wp.int32),
+    transforms: wp.array(dtype=wp.mat44d),
+):
+    """Compose marker poses and scales in the native renderer's matrix layout."""
+    i = wp.tid()
+    source = instance_ids[i]
+    position, orientation, scale = positions[source], orientations[source], scales[source]
+    p = wp.vec3d(wp.float64(position[0]), wp.float64(position[1]), wp.float64(position[2]))
+    q = wp.quatd(
+        wp.float64(orientation[0]), wp.float64(orientation[1]), wp.float64(orientation[2]), wp.float64(orientation[3])
+    )
+    s = wp.vec3d(wp.float64(scale[0]), wp.float64(scale[1]), wp.float64(scale[2]))
+    transforms[i] = local_transforms[i] * wp.transpose(wp.transform_compose(p, q, s))
+
+
+@wp.kernel(enable_backward=False)
+def hide_environment_bodies_kernel(
+    transforms: wp.array(dtype=wp.mat44d),
+    body_envs: wp.array(dtype=wp.int32),
+    hidden_envs: wp.array(dtype=wp.uint8),
+    drop: wp.float64,
+    out: wp.array(dtype=wp.mat44d),
+):
+    """Copy row-vector body poses, moving the bodies of hidden environments down by ``drop`` [m]."""
+    i = wp.tid()
+    pose = transforms[i]
+    if hidden_envs[body_envs[i]] != wp.uint8(0):
+        pose[3, 2] = pose[3, 2] - drop
+    out[i] = pose
+
+
+@wp.kernel
+def create_camera_transforms_kernel(
+    positions: wp.array(dtype=wp.vec3),  # type: ignore
+    orientations: wp.array(dtype=wp.quatf),  # type: ignore
+    transforms: wp.array(dtype=wp.mat44d),  # type: ignore
+):
+    """Convert world-frame camera poses to OVRTX's OpenGL row-vector matrices in one pass."""
+    i = wp.tid()
+    orientation = orientations[i] * wp.quatf(0.5, -0.5, -0.5, 0.5)
+    transforms[i] = wp.mat44d(wp.transpose(wp.transform_to_matrix(wp.transformf(positions[i], orientation))))
+
+
+@wp.kernel
+def extract_all_tiles_kernel(
+    tiled_buffer: wp.array(dtype=Any, ndim=3),  # type: ignore
+    output_buffer: wp.array(dtype=Any, ndim=4),  # type: ignore
+    num_cols: int,
+    tile_width: int,
+    tile_height: int,
+):
+    """Extract ALL tiles from a tiled buffer into per-env tiles in a single kernel launch.
+
+    Generic over the tile channel layout (RGB, RGBA, or single-channel depth) and dtype (e.g. uint8 color,
+    float32 depth/HDR color, or float16 HDR color widened to float32 on output). The channel count is taken
+    from ``output_buffer`` rather than passed explicitly, and each element is cast to the output dtype, so the
+    same kernel body serves every tile-extraction case; see the :func:`warp.overload` registrations below for
+    the concrete dtype pairs this is compiled for.
+
+    Precondition:
+        ``output_buffer``'s channel count (last dimension) must not exceed ``tiled_buffer``'s (the per-thread
+        channel loop below indexes ``tiled_buffer`` up to that bound). In this package, always launch this
+        kernel through ``OVRTXRenderer._launch_extract_all_tiles``, which validates this before every launch
+        instead of relying on each call site to remember to check. Passing a wider output buffer than the
+        tiled input reads out of bounds on the GPU.
+
+    Args:
+        tiled_buffer: 3D array of shape (H, W, C) holding all tiles packed into one buffer.
+        output_buffer: 4D array of shape (num_envs, H, W, C) to receive the per-env tiles, with C no greater
+            than ``tiled_buffer``'s channel count.
+        num_cols: number of columns in the tiled buffer.
+        tile_width: width of each tile.
+        tile_height: height of each tile.
+    """
+    env_idx, y, x = wp.tid()
+    tile_x = env_idx % num_cols
+    tile_y = env_idx // num_cols
+    src_x = tile_x * tile_width + x
+    src_y = tile_y * tile_height + y
+    for channel in range(output_buffer.shape[3]):
+        output_buffer[env_idx, y, x, channel] = output_buffer.dtype(tiled_buffer[src_y, src_x, channel])
+
+
+# uint8 color tiles (e.g. RGB/RGBA, semantic segmentation).
+wp.overload(
+    extract_all_tiles_kernel,
+    [wp.array(dtype=wp.uint8, ndim=3), wp.array(dtype=wp.uint8, ndim=4), int, int, int],
+)
+# float32 tiles (e.g. depth, normals, HDR color).
+wp.overload(
+    extract_all_tiles_kernel,
+    [wp.array(dtype=wp.float32, ndim=3), wp.array(dtype=wp.float32, ndim=4), int, int, int],
+)
+# float16 tiles (e.g. HDR color), widened to a float32 output buffer.
+wp.overload(
+    extract_all_tiles_kernel,
+    [wp.array(dtype=wp.float16, ndim=3), wp.array(dtype=wp.float32, ndim=4), int, int, int],
+)
+# uint32 tiles (e.g. raw instance segmentation IDs).
+wp.overload(
+    extract_all_tiles_kernel,
+    [wp.array(dtype=wp.uint32, ndim=3), wp.array(dtype=wp.uint32, ndim=4), int, int, int],
+)
+# uint32 tiles cast to an int32 output buffer (raw semantic segmentation IDs; matches Isaac RTX's int32
+# non-colorized semantic output, whose per-pixel value is the semantic ID).
+wp.overload(
+    extract_all_tiles_kernel,
+    [wp.array(dtype=wp.uint32, ndim=3), wp.array(dtype=wp.int32, ndim=4), int, int, int],
+)
+
+
+@wp.kernel
+def extract_depth_tile_from_tiled_buffer_kernel(
+    tiled_buffer: wp.array(dtype=wp.float32, ndim=2),  # type: ignore
+    tile_buffer: wp.array(dtype=wp.float32, ndim=3),  # type: ignore
+    tile_x: int,
+    tile_y: int,
+    tile_width: int,
+    tile_height: int,
+):
+    """Extract one depth tile from a tiled depth buffer."""
+    y, x = wp.tid()
+    src_x = tile_x * tile_width + x
+    src_y = tile_y * tile_height + y
+    tile_buffer[y, x, 0] = tiled_buffer[src_y, src_x]
+
+
+@wp.kernel
+def generate_random_colors_from_ids_kernel(
+    input_ids: wp.array(dtype=wp.uint32, ndim=3),  # type: ignore
+    output_colors: wp.array(dtype=wp.uint32, ndim=3),  # type: ignore
+):
+    """Generate random colors given IDs (e.g. semantic IDs).
+
+    Args:
+        input_ids: 3D uint32 array for semantic IDs per pixel.
+        output_colors: 3D uint32 array for colors per pixel; each word is ``r | (g<<8) | (b<<16) | (a<<24)``.
+    """
+    i, j, k = wp.tid()
+    output_colors[i, j, k] = random_color_from_id_wp(input_ids[i, j, k])
+
+
+@wp.kernel(enable_backward=False)
+def accumulate_mesh_normals(
+    points: wp.array(dtype=wp.vec3), indices: wp.array(dtype=wp.int32), normals: wp.array(dtype=wp.vec3)
+):
+    face = wp.tid() * 3
+    a, b, c = indices[face], indices[face + 1], indices[face + 2]
+    normal = wp.cross(points[b] - points[a], points[c] - points[a])
+    wp.atomic_add(normals, a, normal)
+    wp.atomic_add(normals, b, normal)
+    wp.atomic_add(normals, c, normal)
+
+
+@wp.kernel(enable_backward=False)
+def normalize_mesh_normals(normals: wp.array(dtype=wp.vec3)):
+    i = wp.tid()
+    normals[i] = wp.normalize(normals[i])
+
+
+@wp.kernel(enable_backward=False)
+def copy_dense_lidar_points_kernel(
+    coordinates: wp.array2d(dtype=wp.float32),
+    intensity: wp.array(dtype=wp.float32),
+    flags: wp.array(dtype=wp.int32),
+    points: wp.array(dtype=wp.vec3f),
+    intensity_out: wp.array(dtype=wp.float32),
+    valid: wp.array(dtype=wp.bool),
+    spherical: bool,
+):
+    """Copy one dense lidar cloud. Bit 6 of ``flags`` marks a hit; misses become non-finite."""
+    i = wp.tid()
+    hit = (flags[i] & wp.int32(0x40)) != wp.int32(0)
+    if hit:
+        point = wp.vec3f(coordinates[i, 0], coordinates[i, 1], coordinates[i, 2])
+        if spherical:
+            azimuth = wp.radians(point[0])
+            elevation = wp.radians(point[1])
+            horizontal = point[2] * wp.cos(elevation)
+            point = wp.vec3f(horizontal * wp.cos(azimuth), horizontal * wp.sin(azimuth), point[2] * wp.sin(elevation))
+        points[i] = point
+        intensity_out[i] = intensity[i]
+    else:
+        points[i] = wp.vec3f(wp.inf, wp.inf, wp.inf)
+        intensity_out[i] = 0.0
+    valid[i] = hit
+
+
+@wp.kernel
+def create_lidar_transforms_kernel(
+    positions: wp.array(dtype=wp.vec3),
+    orientations: wp.array(dtype=wp.quatf),
+    transforms: wp.array(dtype=wp.mat44d),
+):
+    i = wp.tid()
+    transforms[i] = wp.mat44d(wp.transpose(wp.transform_to_matrix(wp.transformf(positions[i], orientations[i]))))
